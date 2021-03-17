@@ -7,17 +7,29 @@ contract Defantasy {
     uint256 public constant MOVE_ENERGY = 1;
     uint256 public constant MAP_W = 9;
     uint256 public constant MAP_H = 9;
-    uint256 public constant TOTAL = MAP_W * MAP_H;
+    uint256 public constant MAP_SIZE = MAP_W * MAP_H;
 
-    address payable public author;
+    address public developer; // 수수료 3% 분배
+    address public devSupporter; // 개발에 도움주신 분 (수수료 0.3% 분배)
 
-    constructor() {
-        author = msg.sender;
+    uint256 public season = 1;
+    struct Record {
+        address winner;
+        uint256 reward;
+        address[] supporters;
+        uint256[] supporterRewards;
+    }
+    mapping(uint256 => Record) private records;
+
+    constructor(address _devSupporter) {
+        developer = msg.sender;
+        devSupporter = _devSupporter;
     }
 
     address[] public participants;
     mapping(address => bool) public participated;
     mapping(address => uint256) private energies;
+    mapping(address => uint256) private energyUsed;
 
     function participate() internal {
         if (participated[msg.sender] != true) {
@@ -32,8 +44,8 @@ contract Defantasy {
         assert(energies[msg.sender] >= quantity);
         participate();
 
-        // 3.75% fee.
-        author.transfer((msg.value / 10000) * 375);
+        payable(developer).transfer((msg.value / 100) * 3); // 3% fee.
+        payable(devSupporter).transfer((msg.value / 1000) * 3); // 0.3% fee.
     }
 
     struct Support {
@@ -51,8 +63,6 @@ contract Defantasy {
 
         supported[msg.sender].push(Support({to: to, quantity: quantity}));
     }
-
-    uint256 public season = 1;
 
     enum ArmyKind {Light, Fire, Water, Wind, Earth, Dark}
     struct Army {
@@ -88,18 +98,20 @@ contract Defantasy {
         occupied[msg.sender] = 1;
     }
 
-    function calculateDamage(Army memory from, Army memory to) pure internal returns(uint256) {
-
+    function calculateDamage(Army memory from, Army memory to)
+        internal
+        pure
+        returns (uint256)
+    {
         uint256 damage = from.count;
 
         // Light -> *2 -> Dark
         if (from.kind == ArmyKind.Light) {
             if (to.kind == ArmyKind.Dark) {
                 damage *= 2;
-		        assert(damage / 2 == from.count);
+                assert(damage / 2 == from.count);
             }
         }
-        
         // Dark -> *1.25 -> Fire, Water, Wind, Earth
         else if (from.kind == ArmyKind.Dark) {
             if (
@@ -109,18 +121,16 @@ contract Defantasy {
                 to.kind == ArmyKind.Earth
             ) {
                 damage = damage * 125;
-		        assert(damage / 125 == from.count);
+                assert(damage / 125 == from.count);
                 damage /= 100;
             }
         }
-
         // Fire, Water, Wind, Earth -> *1.25 -> Light
         else if (to.kind == ArmyKind.Light) {
             damage = damage * 125;
             assert(damage / 125 == from.count);
             damage /= 100;
         }
-
         // Fire -> *1.5 -> Wind
         // Wind -> *1.5 -> Earth
         // Earth -> *1.5 -> Water
@@ -152,7 +162,8 @@ contract Defantasy {
 
         require(
             (fromX < toX ? toX - fromX : fromX - toX) +
-            (fromY < toY ? toY - fromY : fromY - toY) == 1
+                (fromY < toY ? toY - fromY : fromY - toY) ==
+                1
         );
 
         Army storage from = map[fromY][fromX];
@@ -165,17 +176,15 @@ contract Defantasy {
             map[toY][toX] = from;
             delete map[fromY][fromX];
         }
-
         // combine.
         else if (to.owner == msg.sender) {
             require(to.kind == from.kind);
             to.count += from.count;
             assert(to.count >= from.count);
-            
+
             occupied[msg.sender] -= 1;
             delete map[fromY][fromX];
         }
-        
         // attack.
         else {
             uint256 fromDamage = calculateDamage(from, to);
@@ -187,7 +196,7 @@ contract Defantasy {
             } else {
                 to.count -= fromDamage;
             }
-            
+
             if (toDamage >= from.count) {
                 occupied[msg.sender] -= 1;
                 delete map[fromY][fromX];
@@ -203,17 +212,64 @@ contract Defantasy {
         }
 
         // win.
-        if (occupied[msg.sender] == TOTAL) {
+        if (occupied[msg.sender] == MAP_SIZE) {
             reward(msg.sender);
-            clear();
+            endSeason();
         }
     }
 
     function reward(address winner) internal {
-        // calculate reward rate.
+
+        uint256[] memory supportEnergies = new uint256[](participants.length);
+        uint256 supportedEnergy = 0;
+        uint256 supporterCount = 0;
+
+        for (uint256 i = 0; i < participants.length; i += 1) {
+            for (uint256 j = 0; j < supported[participants[i]].length; j += 1) {
+                Support memory s = supported[participants[i]][j];
+                if (s.to == winner) {
+                    supportEnergies[i] += s.quantity;
+                    supportedEnergy += s.quantity;
+                }
+            }
+            if (supportEnergies[i] > 0) {
+                supporterCount += 1;
+            }
+        }
+
+        uint256 winnerEnergy =
+            energyUsed[winner] > supportedEnergy
+                ? energyUsed[winner] - supportedEnergy
+                : 0;
+
+        uint256 base =
+            address(this).balance / (winnerEnergy * 2 + supportedEnergy);
+
+        uint256 winnerReward = base * winnerEnergy * 2;
+        payable(winner).transfer(winnerReward);
+
+        address[] memory supporters = new address[](supporterCount);
+        uint256[] memory supporterRewards = new uint256[](supporterCount);
+
+        uint256 index;
+        for (uint256 i = 0; i < participants.length; i += 1) {
+            if (supportEnergies[i] > 0) {
+                supporters[index] = participants[i];
+                supporterRewards[index] = base * supportEnergies[i];
+                payable(supporters[index]).transfer(supporterRewards[index]);
+                index += 1;
+            }
+        }
+
+        records[season] = Record({
+            winner: winner,
+            reward: winnerReward,
+            supporters: supporters,
+            supporterRewards: supporterRewards
+        });
     }
 
-    function clear() internal {
+    function endSeason() internal {
         for (uint256 i = 0; i < participants.length; i += 1) {
             delete participated[participants[i]];
             delete energies[participants[i]];
@@ -222,5 +278,6 @@ contract Defantasy {
         }
         delete participants;
         delete map;
+        season += 1;
     }
 }
