@@ -3,8 +3,8 @@ pragma solidity ^0.7.5;
 
 contract Defantasy {
     uint256 public constant ENERGY_PRICE = 100000000000000;
-    uint256 public constant SUMMON_ENERGY = 10;
-    uint256 public constant MOVE_ENERGY = 1;
+    uint256 public constant BASE_SUMMON_ENERGY = 10;
+    uint256 public constant MAX_UNIT_COUNT = 30;
     uint256 public constant MAP_W = 9;
     uint256 public constant MAP_H = 9;
     uint256 public constant MAP_SIZE = MAP_W * MAP_H;
@@ -12,7 +12,7 @@ contract Defantasy {
     address public developer; // 수수료 3% 분배
     address public devSupporter; // 개발에 도움주신 분 (수수료 0.3% 분배)
 
-    uint256 public season = 1;
+    uint256 public season = 0;
     struct Record {
         address winner;
         uint256 reward;
@@ -82,8 +82,11 @@ contract Defantasy {
         require(x < MAP_W);
         require(y < MAP_H);
         require(kind >= ArmyKind.Light && kind <= ArmyKind.Dark);
-        require(energies[msg.sender] >= count * SUMMON_ENERGY);
         require(map[y][x].owner == address(0));
+        require(count <= MAX_UNIT_COUNT);
+
+        uint256 needEnergy = count * (BASE_SUMMON_ENERGY + season);
+        require(energies[msg.sender] >= needEnergy);
 
         // must first time.
         for (uint8 mapY = 0; mapY < MAP_H; mapY += 1) {
@@ -94,8 +97,56 @@ contract Defantasy {
             }
         }
 
+        energies[msg.sender] -= needEnergy;
         map[y][x] = Army({kind: kind, count: count, owner: msg.sender});
         occupied[msg.sender] = 1;
+    }
+
+    function createArmy(
+        uint8 x,
+        uint8 y,
+        ArmyKind kind,
+        uint256 count
+    ) external {
+        require(x < MAP_W);
+        require(y < MAP_H);
+        require(kind >= ArmyKind.Light && kind <= ArmyKind.Dark);
+        require(map[y][x].owner == address(0));
+        require(count <= MAX_UNIT_COUNT);
+
+        uint256 needEnergy = count * (BASE_SUMMON_ENERGY + season);
+        require(energies[msg.sender] >= needEnergy);
+
+        // 주변에 아군이 있는지 확인
+        if (
+            (x >= 1 && map[y][x - 1].owner == msg.sender) ||
+            (y >= 1 && map[y - 1][x].owner == msg.sender) ||
+            (x < MAP_W - 1 && map[y][x + 1].owner == msg.sender) ||
+            (y < MAP_H - 1 && map[y + 1][x].owner == msg.sender)
+        ) {
+            energies[msg.sender] -= needEnergy;
+            map[y][x] = Army({kind: kind, count: count, owner: msg.sender});
+            occupied[msg.sender] += 1;
+        } else {
+            revert();
+        }
+    }
+
+    function appendUnit(
+        uint8 x,
+        uint8 y,
+        uint256 count
+    ) external {
+        require(x < MAP_W);
+        require(y < MAP_H);
+        require(map[y][x].owner == msg.sender);
+        require(map[y][x].count + count <= MAX_UNIT_COUNT);
+
+        uint256 needEnergy = count * (BASE_SUMMON_ENERGY + season);
+        require(energies[msg.sender] >= needEnergy);
+
+        energies[msg.sender] -= needEnergy;
+        map[y][x].count += count;
     }
 
     function calculateDamage(Army memory from, Army memory to)
@@ -219,7 +270,6 @@ contract Defantasy {
     }
 
     function reward(address winner) internal {
-
         uint256[] memory supportEnergies = new uint256[](participants.length);
         uint256 supportedEnergy = 0;
         uint256 supporterCount = 0;
