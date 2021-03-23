@@ -57,6 +57,7 @@ contract Defantasy {
     function support(address to, uint256 quantity) external {
         require(quantity <= energies[msg.sender]);
         energies[msg.sender] -= quantity;
+        energyUsed[msg.sender] += quantity;
 
         energies[to] += quantity;
         assert(energies[to] >= quantity);
@@ -98,6 +99,7 @@ contract Defantasy {
         }
 
         energies[msg.sender] -= needEnergy;
+        energyUsed[msg.sender] += needEnergy;
         map[y][x] = Army({kind: kind, count: count, owner: msg.sender});
         occupied[msg.sender] = 1;
     }
@@ -140,13 +142,17 @@ contract Defantasy {
         require(x < MAP_W);
         require(y < MAP_H);
         require(map[y][x].owner == msg.sender);
-        require(map[y][x].count + count <= MAX_UNIT_COUNT);
+
+        uint256 unitCount = map[y][x].count + count;
+        require(unitCount >= map[y][x].count);
+        require(unitCount <= MAX_UNIT_COUNT);
 
         uint256 needEnergy = count * (BASE_SUMMON_ENERGY + season);
         require(energies[msg.sender] >= needEnergy);
 
         energies[msg.sender] -= needEnergy;
-        map[y][x].count += count;
+        energyUsed[msg.sender] += needEnergy;
+        map[y][x].count = unitCount;
     }
 
     function calculateDamage(Army memory from, Army memory to)
@@ -230,8 +236,12 @@ contract Defantasy {
         // combine.
         else if (to.owner == msg.sender) {
             require(to.kind == from.kind);
-            to.count += from.count;
-            assert(to.count >= from.count);
+
+            uint256 unitCount = to.kind + from.count;
+            require(unitCount >= to.kind);
+            require(unitCount <= MAX_UNIT_COUNT);
+
+            to.count += unitCount;
 
             occupied[msg.sender] -= 1;
             delete map[fromY][fromX];
@@ -287,15 +297,10 @@ contract Defantasy {
             }
         }
 
-        uint256 winnerEnergy =
-            energyUsed[winner] > supportedEnergy
-                ? energyUsed[winner] - supportedEnergy
-                : 0;
+        uint256 winnerEnergy = energyUsed[winner];
+        uint256 base = address(this).balance / (winnerEnergy + supportedEnergy);
 
-        uint256 base =
-            address(this).balance / (winnerEnergy * 2 + supportedEnergy);
-
-        uint256 winnerReward = base * winnerEnergy * 2;
+        uint256 winnerReward = base * winnerEnergy;
         payable(winner).transfer(winnerReward);
 
         address[] memory supporters = new address[](supporterCount);
@@ -325,6 +330,7 @@ contract Defantasy {
             delete energies[participants[i]];
             delete supported[participants[i]];
             delete occupied[participants[i]];
+            delete energyUsed[participants[i]];
         }
         delete participants;
         delete map;
