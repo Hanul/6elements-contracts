@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.7.5;
+pragma solidity ^0.8.2;
 
 contract Defantasy {
     uint256 public constant ENERGY_PRICE = 100000000000000;
     uint256 public constant BASE_SUMMON_ENERGY = 10;
     uint256 public constant MAX_UNIT_COUNT = 30;
-    uint256 public constant MAP_W = 9;
-    uint256 public constant MAP_H = 9;
+    uint256 public constant MAP_W = 8;
+    uint256 public constant MAP_H = 8;
     uint256 public constant MAP_SIZE = MAP_W * MAP_H;
 
     address public developer; // 수수료 3% 분배
@@ -237,11 +237,11 @@ contract Defantasy {
         else if (to.owner == msg.sender) {
             require(to.kind == from.kind);
 
-            uint256 unitCount = to.kind + from.count;
-            require(unitCount >= to.kind);
+            uint256 unitCount = to.count + from.count;
+            require(unitCount >= to.count);
             require(unitCount <= MAX_UNIT_COUNT);
 
-            to.count += unitCount;
+            to.count = unitCount;
 
             occupied[msg.sender] -= 1;
             delete map[fromY][fromX];
