@@ -42,9 +42,19 @@ contract Defantasy {
         devSupporter = newDevSupporter;
     }
 
+    mapping(address => uint256) private energies;
+
+    function buyEnergy() external payable {
+        uint256 quantity = msg.value / ENERGY_PRICE;
+        energies[msg.sender] += quantity;
+        assert(energies[msg.sender] >= quantity);
+
+        payable(developer).transfer((msg.value / 100) * 3); // 3% fee.
+        payable(devSupporter).transfer((msg.value / 1000) * 3); // 0.3% fee.
+    }
+
     address[] public participants;
     mapping(address => bool) public participated;
-    mapping(address => uint256) private energies;
     mapping(address => uint256) private energyUsed;
 
     function participate() internal {
@@ -52,16 +62,6 @@ contract Defantasy {
             participated[msg.sender] = true;
             participants.push(msg.sender);
         }
-    }
-
-    function buyEnergy() external payable {
-        uint256 quantity = msg.value / ENERGY_PRICE;
-        energies[msg.sender] += quantity;
-        assert(energies[msg.sender] >= quantity);
-        participate();
-
-        payable(developer).transfer((msg.value / 100) * 3); // 3% fee.
-        payable(devSupporter).transfer((msg.value / 1000) * 3); // 0.3% fee.
     }
 
     struct Support {
@@ -72,6 +72,8 @@ contract Defantasy {
 
     function support(address to, uint256 quantity) external {
         require(quantity <= energies[msg.sender]);
+
+        participate();
         energies[msg.sender] -= quantity;
         energyUsed[msg.sender] += quantity;
 
@@ -115,6 +117,8 @@ contract Defantasy {
                 }
             }
         }
+
+        participate();
 
         energies[msg.sender] -= needEnergy;
         energyUsed[msg.sender] += needEnergy;
@@ -363,7 +367,6 @@ contract Defantasy {
     function endSeason() internal {
         for (uint256 i = 0; i < participants.length; i += 1) {
             delete participated[participants[i]];
-            delete energies[participants[i]];
             delete supported[participants[i]];
             delete occupied[participants[i]];
             delete energyUsed[participants[i]];
