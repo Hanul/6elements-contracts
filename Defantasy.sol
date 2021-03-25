@@ -9,6 +9,7 @@ contract Defantasy {
     uint8 public constant MAX_MAP_W = 8;
     uint8 public constant MAX_MAP_H = 8;
     uint8 public constant MAX_UNIT_COUNT = 30;
+    uint8 public constant MAX_ENTER_COUNT_PER_BLOCK = 8;
 
     address public developer;
     address public devSupporter;
@@ -16,6 +17,7 @@ contract Defantasy {
     uint256 public season = 0;
     uint8 public mapWidth = BASE_MAP_W;
     uint8 public mapHeight = BASE_MAP_H;
+    mapping(uint256 => uint8) private enterCounts;
 
     struct Record {
         address winner;
@@ -28,6 +30,16 @@ contract Defantasy {
     constructor(address _devSupporter) {
         developer = msg.sender;
         devSupporter = _devSupporter;
+    }
+
+    function changeDeveloper(address newDeveloper) external {
+        require(developer == msg.sender);
+        developer = newDeveloper;
+    }
+
+    function changeDevSupporter(address newDevSupporter) external {
+        require(devSupporter == msg.sender);
+        devSupporter = newDevSupporter;
     }
 
     address[] public participants;
@@ -72,8 +84,9 @@ contract Defantasy {
     enum ArmyKind {Light, Fire, Water, Wind, Earth, Dark}
     struct Army {
         ArmyKind kind;
-        uint256 count;
+        uint16 count;
         address owner;
+        uint256 blockNumber;
     }
     Army[MAX_MAP_H][MAX_MAP_W] public map;
     mapping(address => uint16) private occupied;
@@ -82,13 +95,14 @@ contract Defantasy {
         uint8 x,
         uint8 y,
         ArmyKind kind,
-        uint256 count
+        uint16 count
     ) external {
         require(x < mapWidth);
         require(y < mapHeight);
         require(kind >= ArmyKind.Light && kind <= ArmyKind.Dark);
         require(map[y][x].owner == address(0));
         require(count <= MAX_UNIT_COUNT);
+        require(enterCounts[block.number] <= MAX_ENTER_COUNT_PER_BLOCK);
 
         uint256 needEnergy = count * (BASE_SUMMON_ENERGY + season);
         require(energies[msg.sender] >= needEnergy);
@@ -104,20 +118,28 @@ contract Defantasy {
 
         energies[msg.sender] -= needEnergy;
         energyUsed[msg.sender] += needEnergy;
-        map[y][x] = Army({kind: kind, count: count, owner: msg.sender});
+        map[y][x] = Army({
+            kind: kind,
+            count: count,
+            owner: msg.sender,
+            blockNumber: block.number
+        });
         occupied[msg.sender] = 1;
+
+        enterCounts[block.number] += 1;
     }
 
     function createArmy(
         uint8 x,
         uint8 y,
         ArmyKind kind,
-        uint256 count
+        uint16 count
     ) external {
         require(x < mapWidth);
         require(y < mapHeight);
         require(kind >= ArmyKind.Light && kind <= ArmyKind.Dark);
         require(map[y][x].owner == address(0));
+        require(map[y][x].blockNumber < block.number);
         require(count <= MAX_UNIT_COUNT);
 
         uint256 needEnergy = count * (BASE_SUMMON_ENERGY + season);
@@ -132,7 +154,12 @@ contract Defantasy {
         ) {
             energies[msg.sender] -= needEnergy;
             energyUsed[msg.sender] += needEnergy;
-            map[y][x] = Army({kind: kind, count: count, owner: msg.sender});
+            map[y][x] = Army({
+                kind: kind,
+                count: count,
+                owner: msg.sender,
+                blockNumber: block.number
+            });
             occupied[msg.sender] += 1;
         } else {
             revert();
@@ -142,13 +169,13 @@ contract Defantasy {
     function appendUnit(
         uint8 x,
         uint8 y,
-        uint256 count
+        uint16 count
     ) external {
         require(x < mapWidth);
         require(y < mapHeight);
         require(map[y][x].owner == msg.sender);
 
-        uint256 unitCount = map[y][x].count + count;
+        uint16 unitCount = map[y][x].count + count;
         require(unitCount >= map[y][x].count);
         require(unitCount <= MAX_UNIT_COUNT);
 
@@ -163,9 +190,9 @@ contract Defantasy {
     function calculateDamage(Army memory from, Army memory to)
         internal
         pure
-        returns (uint256)
+        returns (uint16)
     {
-        uint256 damage = from.count;
+        uint16 damage = from.count;
 
         // Light -> *2 -> Dark
         if (from.kind == ArmyKind.Light) {
@@ -232,6 +259,7 @@ contract Defantasy {
         Army storage to = map[toY][toX];
 
         require(from.owner == msg.sender);
+        require(from.blockNumber < block.number);
 
         // move.
         if (to.owner == address(0)) {
@@ -242,7 +270,7 @@ contract Defantasy {
         else if (to.owner == msg.sender) {
             require(to.kind == from.kind);
 
-            uint256 unitCount = to.count + from.count;
+            uint16 unitCount = to.count + from.count;
             require(unitCount >= to.count);
             require(unitCount <= MAX_UNIT_COUNT);
 
@@ -253,8 +281,8 @@ contract Defantasy {
         }
         // attack.
         else {
-            uint256 fromDamage = calculateDamage(from, to);
-            uint256 toDamage = calculateDamage(to, from);
+            uint16 fromDamage = calculateDamage(from, to);
+            uint16 toDamage = calculateDamage(to, from);
 
             if (fromDamage >= to.count) {
                 occupied[to.owner] -= 1;
@@ -303,7 +331,10 @@ contract Defantasy {
         }
 
         uint256 winnerEnergy = energyUsed[winner];
-        uint256 base = address(this).balance / (winnerEnergy + supportedEnergy);
+        uint256 base =
+            (address(this).balance * 90) /
+                100 / // 10% is for next season.
+                (winnerEnergy + supportedEnergy);
 
         uint256 winnerReward = base * winnerEnergy;
         payable(winner).transfer(winnerReward);
