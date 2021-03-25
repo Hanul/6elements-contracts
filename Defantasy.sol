@@ -3,16 +3,20 @@ pragma solidity ^0.8.2;
 
 contract Defantasy {
     uint256 public constant ENERGY_PRICE = 100000000000000;
-    uint256 public constant BASE_SUMMON_ENERGY = 10;
-    uint256 public constant MAX_UNIT_COUNT = 30;
-    uint256 public constant MAP_W = 8;
-    uint256 public constant MAP_H = 8;
-    uint256 public constant MAP_SIZE = MAP_W * MAP_H;
+    uint8 public constant BASE_SUMMON_ENERGY = 10;
+    uint8 public constant BASE_MAP_W = 4;
+    uint8 public constant BASE_MAP_H = 4;
+    uint8 public constant MAX_MAP_W = 8;
+    uint8 public constant MAX_MAP_H = 8;
+    uint8 public constant MAX_UNIT_COUNT = 30;
 
-    address public developer; // 수수료 3% 분배
-    address public devSupporter; // 개발에 도움주신 분 (수수료 0.3% 분배)
+    address public developer;
+    address public devSupporter;
 
     uint256 public season = 0;
+    uint8 public mapWidth = BASE_MAP_W;
+    uint8 public mapHeight = BASE_MAP_H;
+
     struct Record {
         address winner;
         uint256 reward;
@@ -71,7 +75,7 @@ contract Defantasy {
         uint256 count;
         address owner;
     }
-    Army[MAP_H][MAP_W] public map;
+    Army[MAX_MAP_H][MAX_MAP_W] public map;
     mapping(address => uint16) private occupied;
 
     function enter(
@@ -80,8 +84,8 @@ contract Defantasy {
         ArmyKind kind,
         uint256 count
     ) external {
-        require(x < MAP_W);
-        require(y < MAP_H);
+        require(x < mapWidth);
+        require(y < mapHeight);
         require(kind >= ArmyKind.Light && kind <= ArmyKind.Dark);
         require(map[y][x].owner == address(0));
         require(count <= MAX_UNIT_COUNT);
@@ -90,8 +94,8 @@ contract Defantasy {
         require(energies[msg.sender] >= needEnergy);
 
         // must first time.
-        for (uint8 mapY = 0; mapY < MAP_H; mapY += 1) {
-            for (uint8 mapX = 0; mapX < MAP_W; mapX += 1) {
+        for (uint8 mapY = 0; mapY < mapHeight; mapY += 1) {
+            for (uint8 mapX = 0; mapX < mapWidth; mapX += 1) {
                 if (map[mapY][mapX].owner == msg.sender) {
                     revert();
                 }
@@ -110,8 +114,8 @@ contract Defantasy {
         ArmyKind kind,
         uint256 count
     ) external {
-        require(x < MAP_W);
-        require(y < MAP_H);
+        require(x < mapWidth);
+        require(y < mapHeight);
         require(kind >= ArmyKind.Light && kind <= ArmyKind.Dark);
         require(map[y][x].owner == address(0));
         require(count <= MAX_UNIT_COUNT);
@@ -119,14 +123,15 @@ contract Defantasy {
         uint256 needEnergy = count * (BASE_SUMMON_ENERGY + season);
         require(energies[msg.sender] >= needEnergy);
 
-        // 주변에 아군이 있는지 확인
+        // check if there are allies nearby
         if (
             (x >= 1 && map[y][x - 1].owner == msg.sender) ||
             (y >= 1 && map[y - 1][x].owner == msg.sender) ||
-            (x < MAP_W - 1 && map[y][x + 1].owner == msg.sender) ||
-            (y < MAP_H - 1 && map[y + 1][x].owner == msg.sender)
+            (x < mapWidth - 1 && map[y][x + 1].owner == msg.sender) ||
+            (y < mapHeight - 1 && map[y + 1][x].owner == msg.sender)
         ) {
             energies[msg.sender] -= needEnergy;
+            energyUsed[msg.sender] += needEnergy;
             map[y][x] = Army({kind: kind, count: count, owner: msg.sender});
             occupied[msg.sender] += 1;
         } else {
@@ -139,8 +144,8 @@ contract Defantasy {
         uint8 y,
         uint256 count
     ) external {
-        require(x < MAP_W);
-        require(y < MAP_H);
+        require(x < mapWidth);
+        require(y < mapHeight);
         require(map[y][x].owner == msg.sender);
 
         uint256 unitCount = map[y][x].count + count;
@@ -212,10 +217,10 @@ contract Defantasy {
         uint8 toX,
         uint8 toY
     ) external {
-        require(fromX < MAP_W);
-        require(fromY < MAP_H);
-        require(toX < MAP_W);
-        require(toY < MAP_H);
+        require(fromX < mapWidth);
+        require(fromY < mapHeight);
+        require(toX < mapWidth);
+        require(toY < mapHeight);
 
         require(
             (fromX < toX ? toX - fromX : fromX - toX) +
@@ -273,7 +278,7 @@ contract Defantasy {
         }
 
         // win.
-        if (occupied[msg.sender] == MAP_SIZE) {
+        if (occupied[msg.sender] == mapWidth * mapHeight) {
             reward(msg.sender);
             endSeason();
         }
@@ -335,5 +340,15 @@ contract Defantasy {
         delete participants;
         delete map;
         season += 1;
+
+        // expand map every 5 seasons until maximum size.
+        if (season % 5 == 0) {
+            if (mapWidth < MAX_MAP_W) {
+                mapWidth += 1;
+            }
+            if (mapHeight < MAX_MAP_H) {
+                mapHeight += 1;
+            }
+        }
     }
 }
