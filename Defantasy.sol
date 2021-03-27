@@ -350,9 +350,7 @@ contract Defantasy {
 
         payable(winner).transfer(winnerReward);
         for (uint256 i = 0; i < supporters.length; i += 1) {
-            (bool sent, ) =
-                payable(supporters[i]).call{value: supporterRewards[i]}("");
-            if (sent != true) {
+            if (payable(supporters[i]).send(supporterRewards[i]) != true) {
                 supporterRewards[i] = 0;
             }
         }
