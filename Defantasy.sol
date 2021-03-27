@@ -47,8 +47,6 @@ contract Defantasy {
     function buyEnergy() external payable {
         uint256 quantity = msg.value / ENERGY_PRICE;
         energies[msg.sender] += quantity;
-        assert(energies[msg.sender] >= quantity);
-
         payable(developer).transfer((msg.value / 100) * 3); // 3% fee.
         payable(devSupporter).transfer((msg.value / 1000) * 3); // 0.3% fee.
     }
@@ -76,9 +74,7 @@ contract Defantasy {
         participate();
         energies[msg.sender] -= quantity;
         energyUsed[msg.sender] += quantity;
-
         energies[to] += quantity;
-        assert(energies[to] >= quantity);
 
         supported[msg.sender].push(Support({to: to, quantity: quantity}));
     }
@@ -186,7 +182,6 @@ contract Defantasy {
         require(map[y][x].owner == msg.sender);
 
         uint16 unitCount = map[y][x].count + count;
-        require(unitCount >= map[y][x].count);
         require(unitCount <= MAX_UNIT_COUNT);
 
         uint256 needEnergy = count * (BASE_SUMMON_ENERGY + season);
@@ -208,7 +203,6 @@ contract Defantasy {
         if (from.kind == ArmyKind.Light) {
             if (to.kind == ArmyKind.Dark) {
                 damage *= 2;
-                assert(damage / 2 == from.count);
             }
         }
         // Dark -> *1.25 -> Fire, Water, Wind, Earth
@@ -219,16 +213,12 @@ contract Defantasy {
                 to.kind == ArmyKind.Wind ||
                 to.kind == ArmyKind.Earth
             ) {
-                damage = damage * 125;
-                assert(damage / 125 == from.count);
-                damage /= 100;
+                damage = (damage * 125) / 100;
             }
         }
         // Fire, Water, Wind, Earth -> *1.25 -> Light
         else if (to.kind == ArmyKind.Light) {
-            damage = damage * 125;
-            assert(damage / 125 == from.count);
-            damage /= 100;
+            damage = (damage * 125) / 100;
         }
         // Fire -> *1.5 -> Wind
         // Wind -> *1.5 -> Earth
@@ -240,9 +230,7 @@ contract Defantasy {
             (from.kind == ArmyKind.Earth && to.kind == ArmyKind.Water) ||
             (from.kind == ArmyKind.Water && to.kind == ArmyKind.Fire)
         ) {
-            damage = damage * 15;
-            assert(damage / 15 == from.count);
-            damage /= 10;
+            damage = (damage * 15) / 10;
         }
 
         return damage;
@@ -281,7 +269,6 @@ contract Defantasy {
             require(to.kind == from.kind);
 
             uint16 unitCount = to.count + from.count;
-            require(unitCount >= to.count);
             require(unitCount <= MAX_UNIT_COUNT);
 
             to.count = unitCount;
