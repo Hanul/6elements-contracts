@@ -165,6 +165,12 @@ contract Defantasy {
                 blockNumber: block.number
             });
             occupied[msg.sender] += 1;
+
+            // win.
+            if (occupied[msg.sender] == mapWidth * mapHeight) {
+                reward(msg.sender);
+                endSeason();
+            }
         } else {
             revert();
         }
@@ -308,12 +314,6 @@ contract Defantasy {
                 delete map[fromY][fromX];
             }
         }
-
-        // win.
-        if (occupied[msg.sender] == mapWidth * mapHeight) {
-            reward(msg.sender);
-            endSeason();
-        }
     }
 
     function reward(address winner) internal {
@@ -341,7 +341,6 @@ contract Defantasy {
                 (winnerEnergy + supportedEnergy);
 
         uint256 winnerReward = base * winnerEnergy;
-        payable(winner).transfer(winnerReward);
 
         address[] memory supporters = new address[](supporterCount);
         uint256[] memory supporterRewards = new uint256[](supporterCount);
@@ -351,7 +350,6 @@ contract Defantasy {
             if (supportEnergies[i] > 0) {
                 supporters[index] = participants[i];
                 supporterRewards[index] = base * supportEnergies[i];
-                payable(supporters[index]).transfer(supporterRewards[index]);
                 index += 1;
             }
         }
@@ -362,6 +360,11 @@ contract Defantasy {
             supporters: supporters,
             supporterRewards: supporterRewards
         });
+
+        payable(winner).transfer(winnerReward);
+        for (uint256 i = 0; i < supporters.length; i += 1) {
+            payable(supporters[i]).transfer(supporterRewards[i]);
+        }
     }
 
     function endSeason() internal {
