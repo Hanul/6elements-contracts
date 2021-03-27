@@ -350,7 +350,12 @@ contract Defantasy {
 
         payable(winner).transfer(winnerReward);
         for (uint256 i = 0; i < supporters.length; i += 1) {
-            payable(supporters[i]).transfer(supporterRewards[i]);
+            (bool sent, ) =
+                payable(supporters[i]).call{value: supporterRewards[i]}("");
+            if (sent != true) {
+                // If the supporter is a contract, reward cannot be transferred.
+                supporterRewards[i] = 0;
+            }
         }
     }
 
