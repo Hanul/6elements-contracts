@@ -353,7 +353,6 @@ contract Defantasy {
             (bool sent, ) =
                 payable(supporters[i]).call{value: supporterRewards[i]}("");
             if (sent != true) {
-                // If the supporter is a contract, reward cannot be transferred.
                 supporterRewards[i] = 0;
             }
         }
