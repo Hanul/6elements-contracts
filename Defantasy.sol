@@ -47,8 +47,8 @@ contract Defantasy {
     function buyEnergy() external payable {
         uint256 quantity = msg.value / ENERGY_PRICE;
         energies[msg.sender] += quantity;
-        payable(developer).transfer((msg.value / 100) * 3); // 3% fee.
-        payable(devSupporter).transfer((msg.value / 1000) * 3); // 0.3% fee.
+        payable(developer).send((msg.value / 100) * 3); // 3% fee.
+        payable(devSupporter).send((msg.value / 1000) * 3); // 0.3% fee.
     }
 
     address[] public participants;
