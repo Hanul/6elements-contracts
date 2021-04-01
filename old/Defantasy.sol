@@ -139,18 +139,25 @@ contract Defantasy {
         require(y < mapHeight);
         require(kind >= ArmyKind.Light && kind <= ArmyKind.Dark);
         require(map[y][x].owner == address(0));
-        require(map[y][x].blockNumber < block.number);
         require(count <= MAX_UNIT_COUNT);
 
         uint256 needEnergy = count * (BASE_SUMMON_ENERGY + season);
         require(energies[msg.sender] >= needEnergy);
 
-        // check if there are allies nearby
+        // check if there are allies nearby.
         if (
-            (x >= 1 && map[y][x - 1].owner == msg.sender) ||
-            (y >= 1 && map[y - 1][x].owner == msg.sender) ||
-            (x < mapWidth - 1 && map[y][x + 1].owner == msg.sender) ||
-            (y < mapHeight - 1 && map[y + 1][x].owner == msg.sender)
+            (x >= 1 &&
+                map[y][x - 1].owner == msg.sender &&
+                map[y][x - 1].blockNumber < block.number) ||
+            (y >= 1 &&
+                map[y - 1][x].owner == msg.sender &&
+                map[y - 1][x].blockNumber < block.number) ||
+            (x < mapWidth - 1 &&
+                map[y][x + 1].owner == msg.sender &&
+                map[y][x + 1].blockNumber < block.number) ||
+            (y < mapHeight - 1 &&
+                map[y + 1][x].owner == msg.sender &&
+                map[y + 1][x].blockNumber < block.number)
         ) {
             energies[msg.sender] -= needEnergy;
             energyUsed[msg.sender] += needEnergy;
