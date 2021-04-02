@@ -4,6 +4,11 @@ pragma solidity ^0.8.3;
 contract Defantasy {
     event EndSeason(uint256 season);
     //TODO: needs more events
+    // JoinGame
+    // CreateArmy
+    // AppendUnits
+    // Attack
+    // Support
 
     uint256 public constant ENERGY_PRICE = 100000000000000;
     uint8 public constant BASE_SUMMON_ENERGY = 10;
@@ -33,7 +38,7 @@ contract Defantasy {
     mapping(uint256 => uint256) public rewards;
     mapping(uint256 => address) public winners;
     mapping(uint256 => uint256) public rewardBases;
-    mapping(uint256 => mapping(address => bool)) public withdrawns;
+    mapping(uint256 => mapping(address => bool)) public supporterWithdrawns;
 
     mapping(uint256 => mapping(address => uint256)) public energyUsed;
     mapping(uint256 => mapping(address => uint256)) public energyTaken;
@@ -141,6 +146,11 @@ contract Defantasy {
                 rewards[season] /
                 (energyUsed[season][msg.sender] +
                     energyTaken[season][msg.sender]);
+
+            payable(msg.sender).transfer(
+                rewardBases[season] * energyUsed[season][msg.sender]
+            );
+
             emit EndSeason(season);
 
             delete map;
@@ -292,21 +302,12 @@ contract Defantasy {
         energySupported[season][msg.sender][to] += quantity;
     }
 
-    function withdraw(uint256 targetSeason) external {
-        require(withdrawns[targetSeason][msg.sender] != true);
-
-        address winner = winners[targetSeason];
-        if (msg.sender == winner) {
-            payable(msg.sender).transfer(
-                rewardBases[targetSeason] * energyUsed[targetSeason][msg.sender]
-            );
-        }
-
+    function supporterWithdraw(uint256 targetSeason) external {
+        require(supporterWithdrawns[targetSeason][msg.sender] != true);
         payable(msg.sender).transfer(
             rewardBases[targetSeason] *
-                energySupported[targetSeason][msg.sender][winner]
+                energySupported[targetSeason][msg.sender][winners[targetSeason]]
         );
-
-        withdrawns[targetSeason][msg.sender] = true;
+        supporterWithdrawns[targetSeason][msg.sender] = true;
     }
 }
