@@ -2,13 +2,30 @@
 pragma solidity ^0.8.3;
 
 contract Defantasy {
-    event EndSeason(uint256 season);
-    //TODO: needs more events
-    // JoinGame
-    // CreateArmy
-    // AppendUnits
-    // Attack
-    // Support
+    event JoinGame(
+        address player,
+        uint8 x,
+        uint8 y,
+        ArmyKind kind,
+        uint8 unitCount
+    );
+    event CreateArmy(
+        address player,
+        uint8 x,
+        uint8 y,
+        ArmyKind kind,
+        uint8 unitCount
+    );
+    event AppendUnits(address player, uint8 x, uint8 y, uint8 unitCount);
+    event Attack(
+        address player,
+        uint8 fromX,
+        uint8 fromY,
+        uint8 toX,
+        uint8 toY
+    );
+    event Support(address supporter, address to, uint256 quantity);
+    event EndSeason(uint256 season, address winner);
 
     uint256 public constant ENERGY_PRICE = 100000000000000;
     uint8 public constant BASE_SUMMON_ENERGY = 10;
@@ -37,7 +54,6 @@ contract Defantasy {
     uint256 public season = 0;
     mapping(uint256 => uint256) public rewards;
     mapping(uint256 => address) public winners;
-    mapping(uint256 => uint256) public rewardBases;
     mapping(uint256 => mapping(address => bool)) public supporterWithdrawns;
 
     mapping(uint256 => mapping(address => uint256)) public energyUsed;
@@ -65,7 +81,7 @@ contract Defantasy {
 
     function buyEnergy() external payable {
         energies[msg.sender] += msg.value / ENERGY_PRICE;
-        rewards[season] += (msg.value / 10) * 9;
+        rewards[season] += (msg.value * 9) / 10;
         payable(developer).transfer(msg.value / 25); // 4% fee.
         payable(devSupporter).transfer(msg.value / 100); // 1% fee.
     }
@@ -83,8 +99,6 @@ contract Defantasy {
         require(occupyCounts[season][msg.sender] == 0);
 
         uint256 energyNeed = unitCount * (BASE_SUMMON_ENERGY + season);
-        require(energies[msg.sender] >= energyNeed);
-
         energies[msg.sender] -= energyNeed;
         energyUsed[season][msg.sender] += energyNeed;
 
@@ -97,6 +111,8 @@ contract Defantasy {
         occupyCounts[season][msg.sender] = 1;
 
         enterCountsPerBlock[block.number] += 1;
+
+        emit JoinGame(msg.sender, x, y, kind, unitCount);
     }
 
     function createArmy(
@@ -126,8 +142,6 @@ contract Defantasy {
         );
 
         uint256 energyNeed = unitCount * (BASE_SUMMON_ENERGY + season);
-        require(energies[msg.sender] >= energyNeed);
-
         energies[msg.sender] -= energyNeed;
         energyUsed[season][msg.sender] += energyNeed;
 
@@ -139,19 +153,18 @@ contract Defantasy {
         });
         occupyCounts[season][msg.sender] += 1;
 
+        emit CreateArmy(msg.sender, x, y, kind, unitCount);
+
         // win.
         if (occupyCounts[season][msg.sender] == mapWidth * mapHeight) {
             winners[season] = msg.sender;
-            rewardBases[season] =
-                rewards[season] /
-                (energyUsed[season][msg.sender] +
-                    energyTaken[season][msg.sender]);
 
-            payable(msg.sender).transfer(
-                rewardBases[season] * energyUsed[season][msg.sender]
-            );
+            uint256 winnerReward =
+                (rewards[season] * energyUsed[season][msg.sender]) /
+                    (energyUsed[season][msg.sender] +
+                        energyTaken[season][msg.sender]);
 
-            emit EndSeason(season);
+            emit EndSeason(season, msg.sender);
 
             delete map;
             season += 1;
@@ -165,6 +178,8 @@ contract Defantasy {
                     mapHeight += 1;
                 }
             }
+
+            payable(msg.sender).transfer(winnerReward);
         }
     }
 
@@ -175,15 +190,15 @@ contract Defantasy {
     ) external {
         require(x < mapWidth && y < mapHeight && map[y][x].owner == msg.sender);
 
-        uint16 newUnitCount = map[y][x].unitCount + unitCount;
+        uint8 newUnitCount = map[y][x].unitCount + unitCount;
         require(newUnitCount <= MAX_UNIT_COUNT);
 
         uint256 energyNeed = unitCount * (BASE_SUMMON_ENERGY + season);
-        require(energies[msg.sender] >= energyNeed);
-
         energies[msg.sender] -= energyNeed;
         energyUsed[season][msg.sender] += energyNeed;
-        map[y][x].unitCount = unitCount;
+        map[y][x].unitCount = newUnitCount;
+
+        emit AppendUnits(msg.sender, x, y, unitCount);
     }
 
     function calculateDamage(Army memory from, Army memory to)
@@ -259,10 +274,10 @@ contract Defantasy {
         else if (to.owner == msg.sender) {
             require(to.kind == from.kind);
 
-            uint8 unitCount = to.unitCount + from.unitCount;
-            require(unitCount <= MAX_UNIT_COUNT);
+            uint8 newUnitCount = to.unitCount + from.unitCount;
+            require(newUnitCount <= MAX_UNIT_COUNT);
 
-            to.unitCount = unitCount;
+            to.unitCount = newUnitCount;
 
             occupyCounts[season][msg.sender] -= 1;
             delete map[fromY][fromX];
@@ -292,22 +307,31 @@ contract Defantasy {
                 delete map[fromY][fromX];
             }
         }
+
+        emit Attack(msg.sender, fromX, fromY, toX, toY);
     }
 
     function support(address to, uint256 quantity) external {
-        require(energies[msg.sender] >= quantity);
         energies[msg.sender] -= quantity;
         energies[to] += quantity;
         energyTaken[season][to] += quantity;
         energySupported[season][msg.sender][to] += quantity;
+
+        emit Support(msg.sender, to, quantity);
     }
 
     function supporterWithdraw(uint256 targetSeason) external {
+        require(targetSeason < season);
         require(supporterWithdrawns[targetSeason][msg.sender] != true);
-        payable(msg.sender).transfer(
-            rewardBases[targetSeason] *
-                energySupported[targetSeason][msg.sender][winners[targetSeason]]
-        );
         supporterWithdrawns[targetSeason][msg.sender] = true;
+
+        payable(msg.sender).transfer(
+            (rewards[targetSeason] *
+                energySupported[targetSeason][msg.sender][
+                    winners[targetSeason]
+                ]) /
+                (energyUsed[targetSeason][msg.sender] +
+                    energyTaken[targetSeason][msg.sender])
+        );
     }
 }
