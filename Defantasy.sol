@@ -34,7 +34,7 @@ contract Defantasy {
     uint8 public constant MAX_MAP_W = 8;
     uint8 public constant MAX_MAP_H = 8;
     uint8 public constant MAX_UNIT_COUNT = 30;
-    uint8 public constant MAX_ENTER_COUNT_PER_BLOCK = 8;
+    uint8 public constant MAX_JOIN_COUNT_PER_BLOCK = 8;
 
     address public developer;
     address public devSupporter;
@@ -62,7 +62,7 @@ contract Defantasy {
         public energySupported;
     mapping(uint256 => mapping(address => uint8)) public occupyCounts;
 
-    mapping(uint256 => uint8) public enterCountsPerBlock;
+    mapping(uint256 => uint8) public joinCountsPerBlock;
 
     constructor(address _devSupporter) {
         developer = msg.sender;
@@ -86,35 +86,6 @@ contract Defantasy {
         payable(devSupporter).transfer(msg.value / 100); // 1% fee.
     }
 
-    function joinGame(
-        uint8 x,
-        uint8 y,
-        ArmyKind kind,
-        uint8 unitCount
-    ) external {
-        require(enterCountsPerBlock[block.number] <= MAX_ENTER_COUNT_PER_BLOCK);
-        require(x < mapWidth && y < mapHeight && map[y][x].owner == address(0));
-        require(kind >= ArmyKind.Light && kind <= ArmyKind.Dark);
-        require(unitCount <= MAX_UNIT_COUNT);
-        require(occupyCounts[season][msg.sender] == 0);
-
-        uint256 energyNeed = unitCount * (BASE_SUMMON_ENERGY + season);
-        energies[msg.sender] -= energyNeed;
-        energyUsed[season][msg.sender] += energyNeed;
-
-        map[y][x] = Army({
-            kind: kind,
-            unitCount: unitCount,
-            owner: msg.sender,
-            blockNumber: block.number
-        });
-        occupyCounts[season][msg.sender] = 1;
-
-        enterCountsPerBlock[block.number] += 1;
-
-        emit JoinGame(msg.sender, x, y, kind, unitCount);
-    }
-
     function createArmy(
         uint8 x,
         uint8 y,
@@ -125,61 +96,84 @@ contract Defantasy {
         require(kind >= ArmyKind.Light && kind <= ArmyKind.Dark);
         require(unitCount <= MAX_UNIT_COUNT);
 
-        // check if there are allies nearby.
-        require(
-            (x >= 1 &&
-                map[y][x - 1].owner == msg.sender &&
-                map[y][x - 1].blockNumber < block.number) ||
-                (y >= 1 &&
-                    map[y - 1][x].owner == msg.sender &&
-                    map[y - 1][x].blockNumber < block.number) ||
-                (x < mapWidth - 1 &&
-                    map[y][x + 1].owner == msg.sender &&
-                    map[y][x + 1].blockNumber < block.number) ||
-                (y < mapHeight - 1 &&
-                    map[y + 1][x].owner == msg.sender &&
-                    map[y + 1][x].blockNumber < block.number)
-        );
+        // join
+        if (occupyCounts[season][msg.sender] == 0) {
+            require(
+                joinCountsPerBlock[block.number] <= MAX_JOIN_COUNT_PER_BLOCK
+            );
 
-        uint256 energyNeed = unitCount * (BASE_SUMMON_ENERGY + season);
-        energies[msg.sender] -= energyNeed;
-        energyUsed[season][msg.sender] += energyNeed;
+            uint256 energyNeed = unitCount * (BASE_SUMMON_ENERGY + season);
+            energies[msg.sender] -= energyNeed;
+            energyUsed[season][msg.sender] += energyNeed;
 
-        map[y][x] = Army({
-            kind: kind,
-            unitCount: unitCount,
-            owner: msg.sender,
-            blockNumber: block.number
-        });
-        occupyCounts[season][msg.sender] += 1;
+            map[y][x] = Army({
+                kind: kind,
+                unitCount: unitCount,
+                owner: msg.sender,
+                blockNumber: block.number
+            });
+            occupyCounts[season][msg.sender] = 1;
 
-        emit CreateArmy(msg.sender, x, y, kind, unitCount);
+            joinCountsPerBlock[block.number] += 1;
 
-        // win.
-        if (occupyCounts[season][msg.sender] == mapWidth * mapHeight) {
-            winners[season] = msg.sender;
+            emit JoinGame(msg.sender, x, y, kind, unitCount);
+        } else {
+            // check if there are allies nearby.
+            require(
+                (x >= 1 &&
+                    map[y][x - 1].owner == msg.sender &&
+                    map[y][x - 1].blockNumber < block.number) ||
+                    (y >= 1 &&
+                        map[y - 1][x].owner == msg.sender &&
+                        map[y - 1][x].blockNumber < block.number) ||
+                    (x < mapWidth - 1 &&
+                        map[y][x + 1].owner == msg.sender &&
+                        map[y][x + 1].blockNumber < block.number) ||
+                    (y < mapHeight - 1 &&
+                        map[y + 1][x].owner == msg.sender &&
+                        map[y + 1][x].blockNumber < block.number)
+            );
 
-            uint256 winnerReward =
-                (rewards[season] * energyUsed[season][msg.sender]) /
-                    (energyUsed[season][msg.sender] +
-                        energyTaken[season][msg.sender]);
+            uint256 energyNeed = unitCount * (BASE_SUMMON_ENERGY + season);
+            energies[msg.sender] -= energyNeed;
+            energyUsed[season][msg.sender] += energyNeed;
 
-            emit EndSeason(season, msg.sender);
+            map[y][x] = Army({
+                kind: kind,
+                unitCount: unitCount,
+                owner: msg.sender,
+                blockNumber: block.number
+            });
+            occupyCounts[season][msg.sender] += 1;
 
-            delete map;
-            season += 1;
+            emit CreateArmy(msg.sender, x, y, kind, unitCount);
 
-            // expand map every 5 seasons until maximum size.
-            if (season % 5 == 0) {
-                if (mapWidth < MAX_MAP_W) {
-                    mapWidth += 1;
+            // win.
+            if (occupyCounts[season][msg.sender] == mapWidth * mapHeight) {
+                winners[season] = msg.sender;
+
+                uint256 winnerReward =
+                    (rewards[season] * energyUsed[season][msg.sender]) /
+                        (energyUsed[season][msg.sender] +
+                            energyTaken[season][msg.sender]);
+
+                emit EndSeason(season, msg.sender);
+
+                delete map;
+                season += 1;
+
+                // expand map every 5 seasons until maximum size.
+                if (season % 5 == 0) {
+                    if (mapWidth < MAX_MAP_W) {
+                        mapWidth += 1;
+                    }
+                    if (mapHeight < MAX_MAP_H) {
+                        mapHeight += 1;
+                    }
                 }
-                if (mapHeight < MAX_MAP_H) {
-                    mapHeight += 1;
-                }
+
+                payable(msg.sender).transfer(winnerReward);
             }
-
-            payable(msg.sender).transfer(winnerReward);
         }
     }
 
