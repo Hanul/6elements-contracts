@@ -2,6 +2,7 @@
 pragma solidity ^0.8.3;
 
 contract Defantasy {
+    event BuyEnergy(address player, uint256 quantity);
     event JoinGame(
         address player,
         uint8 x,
@@ -80,10 +81,12 @@ contract Defantasy {
     }
 
     function buyEnergy() external payable {
-        energies[msg.sender] += msg.value / ENERGY_PRICE;
+        uint256 quantity = msg.value / ENERGY_PRICE;
+        energies[msg.sender] += quantity;
         rewards[season] += (msg.value * 9) / 10;
         payable(developer).transfer(msg.value / 25); // 4% fee.
         payable(devSupporter).transfer(msg.value / 100); // 1% fee.
+        emit BuyEnergy(msg.sender, quantity);
     }
 
     function createArmy(
