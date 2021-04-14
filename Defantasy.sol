@@ -3,6 +3,7 @@ pragma solidity ^0.8.3;
 
 contract Defantasy {
     event BuyEnergy(address player, uint256 quantity);
+    event UseEnergy(address player, uint256 quantity);
     event JoinGame(
         address player,
         uint8 x,
@@ -109,6 +110,8 @@ contract Defantasy {
             energies[msg.sender] -= energyNeed;
             energyUsed[season][msg.sender] += energyNeed;
 
+            emit UseEnergy(msg.sender, energyNeed);
+
             map[y][x] = Army({
                 kind: kind,
                 unitCount: unitCount,
@@ -140,6 +143,8 @@ contract Defantasy {
             uint256 energyNeed = unitCount * (BASE_SUMMON_ENERGY + season);
             energies[msg.sender] -= energyNeed;
             energyUsed[season][msg.sender] += energyNeed;
+
+            emit UseEnergy(msg.sender, energyNeed);
 
             map[y][x] = Army({
                 kind: kind,
@@ -193,6 +198,9 @@ contract Defantasy {
         uint256 energyNeed = unitCount * (BASE_SUMMON_ENERGY + season);
         energies[msg.sender] -= energyNeed;
         energyUsed[season][msg.sender] += energyNeed;
+
+        emit UseEnergy(msg.sender, energyNeed);
+
         map[y][x].unitCount = newUnitCount;
 
         emit AppendUnits(msg.sender, x, y, unitCount);
@@ -314,6 +322,7 @@ contract Defantasy {
         energyTaken[season][to] += quantity;
         energySupported[season][msg.sender][to] += quantity;
 
+        emit UseEnergy(msg.sender, quantity);
         emit Support(msg.sender, to, quantity);
     }
 
