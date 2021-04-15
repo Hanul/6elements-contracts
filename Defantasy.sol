@@ -2,30 +2,13 @@
 pragma solidity ^0.8.3;
 
 contract Defantasy {
+
     event BuyEnergy(address player, uint256 quantity);
     event UseEnergy(address player, uint256 quantity);
-    event JoinGame(
-        address player,
-        uint8 x,
-        uint8 y,
-        ArmyKind kind,
-        uint8 unitCount
-    );
-    event CreateArmy(
-        address player,
-        uint8 x,
-        uint8 y,
-        ArmyKind kind,
-        uint8 unitCount
-    );
+    event JoinGame(address player, uint8 x, uint8 y, ArmyKind kind, uint8 unitCount);
+    event CreateArmy(address player, uint8 x, uint8 y, ArmyKind kind, uint8 unitCount);
     event AppendUnits(address player, uint8 x, uint8 y, uint8 unitCount);
-    event Attack(
-        address player,
-        uint8 fromX,
-        uint8 fromY,
-        uint8 toX,
-        uint8 toY
-    );
+    event Attack(address player, uint8 fromX, uint8 fromY, uint8 toX, uint8 toY);
     event Support(address supporter, address to, uint256 quantity);
     event EndSeason(uint256 season, address winner);
 
@@ -60,8 +43,7 @@ contract Defantasy {
 
     mapping(uint256 => mapping(address => uint256)) public energyUsed;
     mapping(uint256 => mapping(address => uint256)) public energyTaken;
-    mapping(uint256 => mapping(address => mapping(address => uint256)))
-        public energySupported;
+    mapping(uint256 => mapping(address => mapping(address => uint256))) public energySupported;
     mapping(uint256 => mapping(address => uint8)) public occupyCounts;
 
     mapping(uint256 => uint8) public joinCountsPerBlock;
@@ -90,21 +72,15 @@ contract Defantasy {
         emit BuyEnergy(msg.sender, quantity);
     }
 
-    function createArmy(
-        uint8 x,
-        uint8 y,
-        ArmyKind kind,
-        uint8 unitCount
-    ) external {
+    function createArmy(uint8 x, uint8 y, ArmyKind kind, uint8 unitCount) external {
+
         require(x < mapWidth && y < mapHeight && map[y][x].owner == address(0));
         require(kind >= ArmyKind.Light && kind <= ArmyKind.Dark);
         require(unitCount <= MAX_UNIT_COUNT);
 
         // join
         if (occupyCounts[season][msg.sender] == 0) {
-            require(
-                joinCountsPerBlock[block.number] <= MAX_JOIN_COUNT_PER_BLOCK
-            );
+            require(joinCountsPerBlock[block.number] <= MAX_JOIN_COUNT_PER_BLOCK);
 
             uint256 energyNeed = unitCount * (BASE_SUMMON_ENERGY + season);
             energies[msg.sender] -= energyNeed;
@@ -123,21 +99,16 @@ contract Defantasy {
             joinCountsPerBlock[block.number] += 1;
 
             emit JoinGame(msg.sender, x, y, kind, unitCount);
-        } else {
+        }
+
+        else {
+
             // check if there are allies nearby.
             require(
-                (x >= 1 &&
-                    map[y][x - 1].owner == msg.sender &&
-                    map[y][x - 1].blockNumber < block.number) ||
-                    (y >= 1 &&
-                        map[y - 1][x].owner == msg.sender &&
-                        map[y - 1][x].blockNumber < block.number) ||
-                    (x < mapWidth - 1 &&
-                        map[y][x + 1].owner == msg.sender &&
-                        map[y][x + 1].blockNumber < block.number) ||
-                    (y < mapHeight - 1 &&
-                        map[y + 1][x].owner == msg.sender &&
-                        map[y + 1][x].blockNumber < block.number)
+                (x >= 1 && map[y][x - 1].owner == msg.sender && map[y][x - 1].blockNumber < block.number) ||
+                (y >= 1 && map[y - 1][x].owner == msg.sender && map[y - 1][x].blockNumber < block.number) ||
+                (x < mapWidth - 1 && map[y][x + 1].owner == msg.sender && map[y][x + 1].blockNumber < block.number) ||
+                (y < mapHeight - 1 && map[y + 1][x].owner == msg.sender && map[y + 1][x].blockNumber < block.number)
             );
 
             uint256 energyNeed = unitCount * (BASE_SUMMON_ENERGY + season);
@@ -160,10 +131,8 @@ contract Defantasy {
             if (occupyCounts[season][msg.sender] == mapWidth * mapHeight) {
                 winners[season] = msg.sender;
 
-                uint256 winnerReward =
-                    (rewards[season] * energyUsed[season][msg.sender]) /
-                        (energyUsed[season][msg.sender] +
-                            energyTaken[season][msg.sender]);
+                uint256 winnerReward = (rewards[season] * energyUsed[season][msg.sender]) /
+                        (energyUsed[season][msg.sender] + energyTaken[season][msg.sender]);
 
                 emit EndSeason(season, msg.sender);
 
@@ -185,11 +154,8 @@ contract Defantasy {
         }
     }
 
-    function appendUnits(
-        uint8 x,
-        uint8 y,
-        uint8 unitCount
-    ) external {
+    function appendUnits(uint8 x, uint8 y, uint8 unitCount) external {
+
         require(x < mapWidth && y < mapHeight && map[y][x].owner == msg.sender);
 
         uint8 newUnitCount = map[y][x].unitCount + unitCount;
@@ -206,11 +172,8 @@ contract Defantasy {
         emit AppendUnits(msg.sender, x, y, unitCount);
     }
 
-    function calculateDamage(Army memory from, Army memory to)
-        internal
-        pure
-        returns (uint8)
-    {
+    function calculateDamage(Army memory from, Army memory to) internal pure returns (uint8) {
+
         uint16 damage = from.unitCount;
 
         // Light -> *2 -> Dark
@@ -219,6 +182,7 @@ contract Defantasy {
                 damage *= 2;
             }
         }
+
         // Dark -> *1.25 -> Fire, Water, Wind, Earth
         else if (from.kind == ArmyKind.Dark) {
             if (
@@ -230,10 +194,12 @@ contract Defantasy {
                 damage = (damage * 125) / 100;
             }
         }
+
         // Fire, Water, Wind, Earth -> *1.25 -> Light
         else if (to.kind == ArmyKind.Light) {
             damage = (damage * 125) / 100;
         }
+
         // Fire -> *1.5 -> Wind
         // Wind -> *1.5 -> Earth
         // Earth -> *1.5 -> Water
@@ -250,19 +216,12 @@ contract Defantasy {
         return uint8(damage);
     }
 
-    function attack(
-        uint8 fromX,
-        uint8 fromY,
-        uint8 toX,
-        uint8 toY
-    ) external {
+    function attack( uint8 fromX, uint8 fromY, uint8 toX, uint8 toY) external {
+
         require(fromX < mapWidth && fromY < mapHeight);
         require(toX < mapWidth && toY < mapHeight);
-        require(
-            (fromX < toX ? toX - fromX : fromX - toX) +
-                (fromY < toY ? toY - fromY : fromY - toY) ==
-                1
-        );
+        require((fromX < toX ? toX - fromX : fromX - toX) +
+                (fromY < toY ? toY - fromY : fromY - toY) == 1);
 
         Army storage from = map[fromY][fromX];
         Army storage to = map[toY][toX];
@@ -275,6 +234,7 @@ contract Defantasy {
             map[toY][toX] = from;
             delete map[fromY][fromX];
         }
+
         // combine.
         else if (to.owner == msg.sender) {
             require(to.kind == from.kind);
@@ -287,6 +247,7 @@ contract Defantasy {
             occupyCounts[season][msg.sender] -= 1;
             delete map[fromY][fromX];
         }
+
         // attack.
         else {
             uint8 fromDamage = calculateDamage(from, to);
@@ -332,12 +293,8 @@ contract Defantasy {
         supporterWithdrawns[targetSeason][msg.sender] = true;
 
         payable(msg.sender).transfer(
-            (rewards[targetSeason] *
-                energySupported[targetSeason][msg.sender][
-                    winners[targetSeason]
-                ]) /
-                (energyUsed[targetSeason][msg.sender] +
-                    energyTaken[targetSeason][msg.sender])
+            (rewards[targetSeason] * energySupported[targetSeason][msg.sender][winners[targetSeason]]) /
+                (energyUsed[targetSeason][msg.sender] + energyTaken[targetSeason][msg.sender])
         );
     }
 }
