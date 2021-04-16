@@ -63,16 +63,18 @@ contract Defantasy {
         devSupporter = newDevSupporter;
     }
 
-    function buyEnergy() external payable {
+    function buyEnergy() public payable {
         uint256 quantity = msg.value / ENERGY_PRICE;
-        energies[msg.sender] += quantity;
-        rewards[season] += (msg.value * 9) / 10;
-        payable(developer).transfer(msg.value / 25); // 4% fee.
-        payable(devSupporter).transfer(msg.value / 100); // 1% fee.
-        emit BuyEnergy(msg.sender, quantity);
+        if (quantity > 0) {
+            energies[msg.sender] += quantity;
+            rewards[season] += (msg.value * 9) / 10;
+            payable(developer).transfer(msg.value / 25); // 4% fee.
+            payable(devSupporter).transfer(msg.value / 100); // 1% fee.
+            emit BuyEnergy(msg.sender, quantity);
+        }
     }
 
-    function createArmy(uint8 x, uint8 y, ArmyKind kind, uint8 unitCount) external {
+    function createArmy(uint8 x, uint8 y, ArmyKind kind, uint8 unitCount) external payable {
 
         require(x < mapWidth && y < mapHeight && map[y][x].owner == address(0));
         require(kind >= ArmyKind.Light && kind <= ArmyKind.Dark);
@@ -82,10 +84,10 @@ contract Defantasy {
         if (occupyCounts[season][msg.sender] == 0) {
             require(joinCountsPerBlock[block.number] <= MAX_JOIN_COUNT_PER_BLOCK);
 
+            buyEnergy();
             uint256 energyNeed = unitCount * (BASE_SUMMON_ENERGY + season);
             energies[msg.sender] -= energyNeed;
             energyUsed[season][msg.sender] += energyNeed;
-
             emit UseEnergy(msg.sender, energyNeed);
 
             map[y][x] = Army({
@@ -111,10 +113,10 @@ contract Defantasy {
                 (y < mapHeight - 1 && map[y + 1][x].owner == msg.sender && map[y + 1][x].blockNumber < block.number)
             );
 
+            buyEnergy();
             uint256 energyNeed = unitCount * (BASE_SUMMON_ENERGY + season);
             energies[msg.sender] -= energyNeed;
             energyUsed[season][msg.sender] += energyNeed;
-
             emit UseEnergy(msg.sender, energyNeed);
 
             map[y][x] = Army({
@@ -154,17 +156,17 @@ contract Defantasy {
         }
     }
 
-    function appendUnits(uint8 x, uint8 y, uint8 unitCount) external {
+    function appendUnits(uint8 x, uint8 y, uint8 unitCount) external payable {
 
         require(x < mapWidth && y < mapHeight && map[y][x].owner == msg.sender);
 
         uint8 newUnitCount = map[y][x].unitCount + unitCount;
         require(newUnitCount <= MAX_UNIT_COUNT);
 
+        buyEnergy();
         uint256 energyNeed = unitCount * (BASE_SUMMON_ENERGY + season);
         energies[msg.sender] -= energyNeed;
         energyUsed[season][msg.sender] += energyNeed;
-
         emit UseEnergy(msg.sender, energyNeed);
 
         map[y][x].unitCount = newUnitCount;
@@ -177,13 +179,22 @@ contract Defantasy {
         uint16 damage = from.unitCount;
 
         // Light -> *2 -> Dark
+        // Light -> /1.25 -> Fire, Water, Wind, Earth
         if (from.kind == ArmyKind.Light) {
             if (to.kind == ArmyKind.Dark) {
                 damage *= 2;
+            } else if (
+                to.kind == ArmyKind.Fire ||
+                to.kind == ArmyKind.Water ||
+                to.kind == ArmyKind.Wind ||
+                to.kind == ArmyKind.Earth
+            ) {
+                damage = (damage * 100) / 125;
             }
         }
 
         // Dark -> *1.25 -> Fire, Water, Wind, Earth
+        // Dark -> /2 -> Light
         else if (from.kind == ArmyKind.Dark) {
             if (
                 to.kind == ArmyKind.Fire ||
@@ -192,12 +203,19 @@ contract Defantasy {
                 to.kind == ArmyKind.Earth
             ) {
                 damage = (damage * 125) / 100;
+            } else if (to.kind == ArmyKind.Light) {
+                damage /= 2;
             }
         }
 
         // Fire, Water, Wind, Earth -> *1.25 -> Light
         else if (to.kind == ArmyKind.Light) {
             damage = (damage * 125) / 100;
+        }
+
+        // Fire, Water, Wind, Earth -> /1.25 -> Dark
+        else if (to.kind == ArmyKind.Dark) {
+            damage = (damage * 100) / 125;
         }
 
         // Fire -> *1.5 -> Wind
@@ -211,6 +229,19 @@ contract Defantasy {
             (from.kind == ArmyKind.Water && to.kind == ArmyKind.Fire)
         ) {
             damage = (damage * 15) / 10;
+        }
+
+        // Wind -> /1.5 -> Fire
+        // Earth -> /1.5 -> Wind
+        // Water -> /1.5 -> Earth
+        // Fire -> /1.5 -> Water
+        else if (
+            (from.kind == ArmyKind.Wind && to.kind == ArmyKind.Fire) ||
+            (from.kind == ArmyKind.Earth && to.kind == ArmyKind.Wind) ||
+            (from.kind == ArmyKind.Water && to.kind == ArmyKind.Earth) ||
+            (from.kind == ArmyKind.Fire && to.kind == ArmyKind.Water)
+        ) {
+            damage = (damage * 10) / 15;
         }
 
         return uint8(damage);
@@ -277,7 +308,9 @@ contract Defantasy {
         emit Attack(msg.sender, fromX, fromY, toX, toY);
     }
 
-    function support(address to, uint256 quantity) external {
+    function support(address to, uint256 quantity) external payable {
+        buyEnergy();
+
         energies[msg.sender] -= quantity;
         energies[to] += quantity;
         energyTaken[season][to] += quantity;
