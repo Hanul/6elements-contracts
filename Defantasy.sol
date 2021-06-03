@@ -19,7 +19,7 @@ contract Defantasy {
     uint8 public constant MAX_MAP_W = 8;
     uint8 public constant MAX_MAP_H = 8;
     uint8 public constant MAX_UNIT_COUNT = 30;
-    uint8 public constant MAX_JOIN_COUNT_PER_BLOCK = 8;
+    uint8 public constant MAX_ENTER_COUNT_PER_BLOCK = 8;
 
     address public developer;
     address public devSupporter;
@@ -46,7 +46,7 @@ contract Defantasy {
     mapping(uint256 => mapping(address => mapping(address => uint256))) public energySupported;
     mapping(uint256 => mapping(address => uint8)) public occupyCounts;
 
-    mapping(uint256 => uint8) public joinCountsPerBlock;
+    mapping(uint256 => uint8) public enterCountsPerBlock;
 
     constructor(address _devSupporter) {
         developer = msg.sender;
@@ -67,7 +67,7 @@ contract Defantasy {
         uint256 quantity = msg.value / ENERGY_PRICE;
         if (quantity > 0) {
             energies[msg.sender] += quantity;
-            rewards[season] += (msg.value * 9) / 10;
+            rewards[season] += (msg.value * 95) / 100;
             payable(developer).transfer(msg.value / 25); // 4% fee.
             payable(devSupporter).transfer(msg.value / 100); // 1% fee.
             emit BuyEnergy(msg.sender, quantity);
@@ -76,13 +76,13 @@ contract Defantasy {
 
     function createArmy(uint8 x, uint8 y, ArmyKind kind, uint8 unitCount) external payable {
 
-        require(x < mapWidth && y < mapHeight && map[y][x].owner == address(0));
+        require(x < mapWidth && y < mapHeight && map[y][x].owner == address(0), "This space is not empty");
         require(kind >= ArmyKind.Light && kind <= ArmyKind.Dark);
-        require(unitCount <= MAX_UNIT_COUNT);
+        require(unitCount <= MAX_UNIT_COUNT, "Exceeds max unit counts per space");
 
-        // join
+        // enter
         if (occupyCounts[season][msg.sender] == 0) {
-            require(joinCountsPerBlock[block.number] <= MAX_JOIN_COUNT_PER_BLOCK);
+            require(enterCountsPerBlock[block.number] <= MAX_ENTER_COUNT_PER_BLOCK, "Exceeds max enter counts per block");
 
             buyEnergy();
             uint256 energyNeed = unitCount * (BASE_SUMMON_ENERGY + season);
@@ -98,7 +98,7 @@ contract Defantasy {
             });
             occupyCounts[season][msg.sender] = 1;
 
-            joinCountsPerBlock[block.number] += 1;
+            enterCountsPerBlock[block.number] += 1;
 
             emit JoinGame(msg.sender, x, y, kind, unitCount);
         }
@@ -110,7 +110,8 @@ contract Defantasy {
                 (x >= 1 && map[y][x - 1].owner == msg.sender && map[y][x - 1].blockNumber < block.number) ||
                 (y >= 1 && map[y - 1][x].owner == msg.sender && map[y - 1][x].blockNumber < block.number) ||
                 (x < mapWidth - 1 && map[y][x + 1].owner == msg.sender && map[y][x + 1].blockNumber < block.number) ||
-                (y < mapHeight - 1 && map[y + 1][x].owner == msg.sender && map[y + 1][x].blockNumber < block.number)
+                (y < mapHeight - 1 && map[y + 1][x].owner == msg.sender && map[y + 1][x].blockNumber < block.number),
+                "Only summon next to space occupied by your army"
             );
 
             buyEnergy();
@@ -158,10 +159,10 @@ contract Defantasy {
 
     function appendUnits(uint8 x, uint8 y, uint8 unitCount) external payable {
 
-        require(x < mapWidth && y < mapHeight && map[y][x].owner == msg.sender);
+        require(x < mapWidth && y < mapHeight && map[y][x].owner == msg.sender, "Only append to your army");
 
         uint8 newUnitCount = map[y][x].unitCount + unitCount;
-        require(newUnitCount <= MAX_UNIT_COUNT);
+        require(newUnitCount <= MAX_UNIT_COUNT, "Exceeds max unit counts per space");
 
         buyEnergy();
         uint256 energyNeed = unitCount * (BASE_SUMMON_ENERGY + season);
@@ -247,7 +248,7 @@ contract Defantasy {
         return uint8(damage);
     }
 
-    function attack( uint8 fromX, uint8 fromY, uint8 toX, uint8 toY) external {
+    function attack(uint8 fromX, uint8 fromY, uint8 toX, uint8 toY) external {
 
         require(fromX < mapWidth && fromY < mapHeight);
         require(toX < mapWidth && toY < mapHeight);
@@ -258,7 +259,7 @@ contract Defantasy {
         Army storage to = map[toY][toX];
 
         require(from.owner == msg.sender);
-        require(from.blockNumber < block.number);
+        require(from.blockNumber < block.number, "Wait until next block to attack");
 
         // move.
         if (to.owner == address(0)) {
@@ -271,7 +272,7 @@ contract Defantasy {
             require(to.kind == from.kind);
 
             uint8 newUnitCount = to.unitCount + from.unitCount;
-            require(newUnitCount <= MAX_UNIT_COUNT);
+            require(newUnitCount <= MAX_UNIT_COUNT, "Exceeds max unit counts per space");
 
             to.unitCount = newUnitCount;
 
