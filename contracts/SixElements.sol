@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.3;
+pragma solidity ^0.8.5;
 
-contract Defantasy {
+contract SixElements {
 
     event BuyEnergy(address player, uint256 quantity);
     event UseEnergy(address player, uint256 quantity);

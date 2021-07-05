@@ -1,1 +1,1 @@
-# defantasy-contracts
+# 6elements-contracts
